@@ -11,6 +11,8 @@ export interface Group {
   memberIds: Id[];
 }
 
+export type Category = 'food' | 'stay' | 'transport' | 'fun' | 'shopping' | 'bills' | 'other';
+
 export interface Expense {
   id: Id;
   description: string;
@@ -23,6 +25,13 @@ export interface Expense {
   shares: Record<Id, number>;
   /** ISO date string. */
   date: string;
+  /** Optional so data saved before categories existed still loads. */
+  category?: Category;
+  /**
+   * 'payment' = a settle-up record: `paidById` paid the one person in `shares`.
+   * Stored like an expense so the balance maths needs no special case.
+   */
+  kind?: 'payment';
 }
 
 export interface AppState {

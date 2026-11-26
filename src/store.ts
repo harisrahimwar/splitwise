@@ -9,6 +9,7 @@ export type Action =
   | { type: 'addGroup'; name: string; memberIds: Id[] }
   | { type: 'addGroupMember'; groupId: Id; userId: Id }
   | { type: 'addExpense'; expense: Omit<Expense, 'id'> }
+  | { type: 'updateExpense'; expense: Expense }
   | { type: 'deleteExpense'; id: Id }
   | { type: 'setCurrentUser'; id: Id }
   | { type: 'reset' };
@@ -37,6 +38,11 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case 'addExpense':
       return { ...state, expenses: [...state.expenses, { ...action.expense, id: newId('e') }] };
+    case 'updateExpense':
+      return {
+        ...state,
+        expenses: state.expenses.map((e) => (e.id === action.expense.id ? action.expense : e)),
+      };
     case 'deleteExpense':
       return { ...state, expenses: state.expenses.filter((e) => e.id !== action.id) };
     case 'setCurrentUser':

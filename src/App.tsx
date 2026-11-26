@@ -1,165 +1,80 @@
-import { useState, type FormEvent } from 'react';
-import { balanceBetween, formatMoney } from './money';
+import { useEffect, useState } from 'react';
+import { Icon, type IconName } from './components/ui';
+import type { Nav, Screen, TabName } from './nav';
+import { AccountScreen } from './screens/Account';
+import { ActivityScreen } from './screens/Activity';
+import { AddExpenseScreen } from './screens/AddExpense';
+import { ExpenseScreen } from './screens/ExpenseDetail';
+import { FriendScreen } from './screens/Friend';
+import { GroupScreen } from './screens/Group';
+import { GroupsScreen, NewGroupScreen } from './screens/Groups';
+import { HomeScreen } from './screens/Home';
+import { SettledScreen, SettleScreen } from './screens/Settle';
 import { useAppState } from './store';
-import type { Id } from './types';
-import { DashboardView, FriendView, GroupView } from './views';
 
-type View = { kind: 'dashboard' } | { kind: 'friend'; id: Id } | { kind: 'group'; id: Id };
+const TABS: { name: TabName | 'add'; label: string; icon: IconName }[] = [
+  { name: 'home', label: 'Home', icon: 'home' },
+  { name: 'groups', label: 'Groups', icon: 'users' },
+  { name: 'add', label: 'Add', icon: 'plus' },
+  { name: 'activity', label: 'Activity', icon: 'activity' },
+  { name: 'account', label: 'Account', icon: 'user' },
+];
 
 export default function App() {
   const [state, dispatch] = useAppState();
-  const [view, setView] = useState<View>({ kind: 'dashboard' });
-  const [friendName, setFriendName] = useState('');
-  const [friendError, setFriendError] = useState('');
-  const [creatingGroup, setCreatingGroup] = useState(false);
-  const [groupName, setGroupName] = useState('');
-  const [groupMembers, setGroupMembers] = useState<Id[]>([]);
-  const [groupError, setGroupError] = useState('');
+  // A simple screen stack: the first entry is always a tab, later entries are pushed screens.
+  const [stack, setStack] = useState<Screen[]>([{ name: 'home' }]);
+  const screen = stack[stack.length - 1];
 
-  const me = state.currentUserId;
-  const friends = state.users.filter((u) => u.id !== me);
+  const nav: Nav = {
+    push: (s) => setStack((prev) => [...prev, s]),
+    replace: (s) => setStack((prev) => [...prev.slice(0, -1), s]),
+    back: () => setStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev)),
+    tab: (name) => setStack([{ name }]),
+  };
 
-  function addFriend(e: FormEvent) {
-    e.preventDefault();
-    const name = friendName.trim();
-    if (!name) return;
-    if (state.users.some((u) => u.name.toLowerCase() === name.toLowerCase())) {
-      return setFriendError(`${name} is already on the list.`);
-    }
-    dispatch({ type: 'addUser', name });
-    setFriendName('');
-    setFriendError('');
-  }
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [stack.length, screen.name]);
 
-  function startGroup() {
-    setCreatingGroup(true);
-    setGroupName('');
-    setGroupMembers([me]);
-    setGroupError('');
-  }
-
-  function createGroup(e: FormEvent) {
-    e.preventDefault();
-    if (!groupName.trim()) return setGroupError('Give the group a name.');
-    if (groupMembers.length < 2) return setGroupError('Pick at least 2 members.');
-    dispatch({ type: 'addGroup', name: groupName.trim(), memberIds: groupMembers });
-    setCreatingGroup(false);
-  }
-
-  function toggleMember(id: Id) {
-    setGroupMembers((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
-  }
-
-  const isActive = (v: View) => v.kind === view.kind && ('id' in v ? 'id' in view && v.id === view.id : true);
+  const props = { state, dispatch, nav };
+  const isTab = stack.length === 1;
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <h1>CDSplit</h1>
-        <div className="topbar-right">
-          <label>
-            Viewing as{' '}
-            <select
-              value={me}
-              onChange={(e) => {
-                dispatch({ type: 'setCurrentUser', id: e.target.value });
-                setView({ kind: 'dashboard' });
-              }}
-            >
-              {state.users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            onClick={() => {
-              if (confirm('Reset all data back to the demo data?')) {
-                dispatch({ type: 'reset' });
-                setView({ kind: 'dashboard' });
-              }
-            }}
-          >
-            Reset demo data
-          </button>
-        </div>
-      </header>
+    <div className={`app ${isTab ? 'app--tabs' : ''}`}>
+      {screen.name === 'home' && <HomeScreen {...props} />}
+      {screen.name === 'groups' && <GroupsScreen {...props} />}
+      {screen.name === 'activity' && <ActivityScreen {...props} />}
+      {screen.name === 'account' && <AccountScreen {...props} />}
+      {screen.name === 'group' && <GroupScreen key={screen.id} {...props} groupId={screen.id} />}
+      {screen.name === 'friend' && <FriendScreen key={screen.id} {...props} friendId={screen.id} />}
+      {screen.name === 'newGroup' && <NewGroupScreen {...props} />}
+      {screen.name === 'addExpense' && <AddExpenseScreen {...props} {...screen} />}
+      {screen.name === 'expense' && <ExpenseScreen key={screen.id} {...props} expenseId={screen.id} />}
+      {screen.name === 'settle' && <SettleScreen key={`${screen.fromId}-${screen.toId}`} {...props} {...screen} />}
+      {screen.name === 'settled' && <SettledScreen {...props} {...screen} />}
 
-      <div className="layout">
-        <nav className="sidebar">
-          <button
-            className={`nav-item ${isActive({ kind: 'dashboard' }) ? 'active' : ''}`}
-            onClick={() => setView({ kind: 'dashboard' })}
-          >
-            Dashboard
-          </button>
-
-          <h4>Groups</h4>
-          {state.groups.map((g) => (
-            <button
-              key={g.id}
-              className={`nav-item ${isActive({ kind: 'group', id: g.id }) ? 'active' : ''}`}
-              onClick={() => setView({ kind: 'group', id: g.id })}
-            >
-              {g.name} <span className="muted small">({g.memberIds.length})</span>
-            </button>
-          ))}
-          {!creatingGroup && (
-            <button className="link" onClick={startGroup}>
-              + New group
-            </button>
-          )}
-          {creatingGroup && (
-            <form className="card mini-form" onSubmit={createGroup}>
-              <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Group name" autoFocus />
-              {state.users.map((u) => (
-                <label key={u.id} className="inline">
-                  <input type="checkbox" checked={groupMembers.includes(u.id)} onChange={() => toggleMember(u.id)} />{' '}
-                  {u.name}
-                </label>
-              ))}
-              {groupError && <p className="error">{groupError}</p>}
-              <div className="actions">
-                <button type="submit" className="primary">
-                  Create
-                </button>
-                <button type="button" onClick={() => setCreatingGroup(false)}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
-
-          <h4>Friends</h4>
-          {friends.map((f) => {
-            const balance = balanceBetween(state.expenses, me, f.id);
+      {isTab && (
+        <nav className="tabbar" aria-label="Main">
+          {TABS.map((t) => {
+            const active = t.name === screen.name;
             return (
               <button
-                key={f.id}
-                className={`nav-item ${isActive({ kind: 'friend', id: f.id }) ? 'active' : ''}`}
-                onClick={() => setView({ kind: 'friend', id: f.id })}
+                key={t.name}
+                type="button"
+                className={`tabbar__item ${active ? 'tabbar__item--active' : ''} ${t.name === 'add' ? 'tabbar__item--add' : ''}`}
+                aria-current={active ? 'page' : undefined}
+                onClick={() => (t.name === 'add' ? nav.push({ name: 'addExpense' }) : nav.tab(t.name))}
               >
-                {f.name}
-                {balance !== 0 && (
-                  <span className={`small ${balance > 0 ? 'positive' : 'negative'}`}> {formatMoney(balance)}</span>
-                )}
+                <span className="tabbar__icon">
+                  <Icon name={t.icon} size={28} />
+                </span>
+                {t.label}
               </button>
             );
           })}
-          <form className="mini-form" onSubmit={addFriend}>
-            <input value={friendName} onChange={(e) => setFriendName(e.target.value)} placeholder="Friend's name" />
-            <button type="submit">Add friend</button>
-            {friendError && <p className="error">{friendError}</p>}
-          </form>
         </nav>
-
-        <main className="content">
-          {view.kind === 'dashboard' && <DashboardView state={state} dispatch={dispatch} />}
-          {view.kind === 'friend' && <FriendView key={view.id} state={state} dispatch={dispatch} friendId={view.id} />}
-          {view.kind === 'group' && <GroupView key={view.id} state={state} dispatch={dispatch} groupId={view.id} />}
-        </main>
-      </div>
+      )}
     </div>
   );
 }

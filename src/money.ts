@@ -1,5 +1,10 @@
 import type { Expense, Id } from './types';
 
+/** Today (or `d`) as YYYY-MM-DD in the user's own time zone, not UTC. */
+export function localISODate(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function formatMoney(cents: number): string {
   return `RM ${(Math.abs(cents) / 100).toFixed(2)}`;
 }
@@ -22,6 +27,32 @@ export function splitEqually(total: number, ids: Id[]): Record<Id, number> {
     if (remainder > 0) remainder--;
   }
   return shares;
+}
+
+/** Like formatMoney but keeps the sign: "+RM 12.00", "-RM 3.50", "RM 0.00". */
+export function formatSigned(cents: number): string {
+  return `${cents > 0 ? '+' : cents < 0 ? '-' : ''}${formatMoney(cents)}`;
+}
+
+/**
+ * Splits a total in proportion to whole-number weights (percent points, share counts).
+ * Leftover cents go to the people with the largest remainders, so the parts always sum to `total`.
+ */
+export function splitByWeights(total: number, weights: Record<Id, number>): Record<Id, number> {
+  const ids = Object.keys(weights).filter((id) => weights[id] > 0);
+  const sum = ids.reduce((s, id) => s + weights[id], 0);
+  const shares: Record<Id, number> = {};
+  if (sum === 0) return shares;
+  const parts = ids.map((id) => {
+    const exact = (total * weights[id]) / sum;
+    return { id, base: Math.floor(exact), rest: exact - Math.floor(exact) };
+  });
+  let remainder = total - parts.reduce((s, p) => s + p.base, 0);
+  for (const p of [...parts].sort((a, b) => b.rest - a.rest)) {
+    shares[p.id] = p.base + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder--;
+  }
+  return Object.fromEntries(ids.map((id) => [id, shares[id]]));
 }
 
 export function isInvolved(expense: Expense, userId: Id): boolean {
